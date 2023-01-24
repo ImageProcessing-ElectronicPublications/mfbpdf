@@ -568,7 +568,7 @@ int main(int argc, char* argv[])
             if(!(level = ImageDjvulThreshold(bufpnm, bufmask, bufbg, buffg, w, h, spp, bgs, level, wbmode, doverlay, anisotropic, contrast, fbscale, delta)))
             {
                 fprintf(stderr, "ERROR: not complite DjVuL\n");
-                 exit(-3);
+                exit(-3);
             }
         }
         else

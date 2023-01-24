@@ -1,6 +1,6 @@
 # MFBpdf
 
-**MFBpdf** is a simple project for easy converting PNM to (MASK+FG+BG)-pdf.
+**MFBpdf** is a simple project for easy converting `PNM` to (MASK+FG+BG)-pdf.
 It uses [libtiff](https://github.com/vadz/libtiff) and [libjpeg](https://github.com/LuaDist/libjpeg) for all technichal work and compression.
 The breakdown of the image into components is done using [DjVuL](https://github.com/plzombie/depress/issues/2) and [DjVuL wiki](https://sourceforge.net/p/imthreshold/wiki/DjVuL/?version=3).
 
