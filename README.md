@@ -4,6 +4,8 @@
 It uses [libtiff](https://github.com/vadz/libtiff) and [libjpeg](https://github.com/LuaDist/libjpeg) for all technichal work and compression.
 The breakdown of the image into components is done using [DjVuL](https://github.com/plzombie/depress/issues/2) and [DjVuL wiki](https://sourceforge.net/p/imthreshold/wiki/DjVuL/?version=3).
 
+See [MFBpdf demo](https://github.com/ImageProcessing-ElectronicPublications/mfbpdf-demo).
+
 ## Install
 
 ### install library
