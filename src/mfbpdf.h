@@ -53,4 +53,4 @@ extern int getopt(int, char**, char*);
 #define streq(a,b)  (strcmp(a,b) == 0)
 #define strneq(a,b,n)   (strncmp(a,b,n) == 0)
 
-#define MFBPDF_VERSION "1.0"
+#define MFBPDF_VERSION "1.1"

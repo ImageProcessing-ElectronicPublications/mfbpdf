@@ -36,6 +36,7 @@ where options are:
  -l #      level DjVuL (0 - auto) {0}
  -o #      overlay blocks DjVuL {0.5}
  -q #      jpeg quality {75}
+ -r        rewrite tiff
  -x #      linear regulator DjVuL {*1.0}
  -y #      linear regulator DjVuL {+0.0}
  -z #      black mode
@@ -59,3 +60,5 @@ The new algorithm allowed not only to obtain a much more adequate result, but al
 * [pdfcook](https://github.com/ksharindam/pdfcook)
 * [tesseract](https://github.com/tesseract-ocr/tesseract)
 * [hocr-tools](https://github.com/ocropus/hocr-tools)
+* [imthreshold](https://github.com/ImageProcessing-ElectronicPublications/imthreshold)
+* [aithreshold](https://github.com/ImageProcessing-ElectronicPublications/aithreshold)

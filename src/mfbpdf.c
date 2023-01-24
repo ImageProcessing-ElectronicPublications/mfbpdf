@@ -36,7 +36,7 @@ static void usage(void)
 {
     char* stuff[] =
     {
-        "usage: mfbpdf [options] input.ppm output.tif output.pdf",
+        "usage: mfbpdf [options] input.ppm input|output.tif output.pdf",
         "where options are:",
         " -a #      anisotropic regulator DjVuL {0.0}",
         " -b #      BG and FG downsample {3}",
@@ -46,6 +46,7 @@ static void usage(void)
         " -l #      level DjVuL (0 - auto) {0}",
         " -o #      overlay blocks DjVuL {0.5}",
         " -q #      jpeg quality {75}",
+        " -r        rewrite tiff",
         " -x #      linear regulator DjVuL {*1.0}",
         " -y #      linear regulator DjVuL {+0.0}",
         " -z        black mode",
@@ -156,12 +157,26 @@ int main(int argc, char* argv[])
     unsigned char *buffg = NULL;
     unsigned char *jcompressed = NULL;
     unsigned long int jsize = 0, tifflen;
-    tmsize_t linebytes = 0, kd, ki;
-    tmsize_t pbmlinebytes = 0;
+    tsize_t kd, ki;
+    tsize_t linebytes = 0;
+    tsize_t pbmlinebytes = 0;
+    tsize_t datasize = 0;
+    tsize_t rowsize = 0;
+    tsize_t stripsize = 0;
+    tsize_t stripcount = 0;
+    tsize_t bufferoffset = 0;
+    tsize_t read = 0;
+    uint16 compression = COMPRESSION_CCITTFAX4;
+    uint16 photometric = PHOTOMETRIC_MINISWHITE;
     uint16 spp = 1;
     uint16 bpp = 8;
+    uint16 sppm = 1;
+    uint16 bppm = 1;
+    uint16 bwmw = 0;
+    uint16 bwmb = 1;
     TIFF *outtiff;
-    FILE *in, *out;
+    FILE *fin, *fout, *ftmp;
+    int maskexist = 0;
     unsigned int bgs = 3;
     unsigned int fgs = 2;
     unsigned int level = 0;
@@ -171,7 +186,8 @@ int main(int argc, char* argv[])
     float contrast = 0.0f;
     float fbscale = 1.0f;
     float delta = 0.0f;
-    unsigned int h, w, wd, hbg, wbg,  hfg, wfg;
+    int retiff = 0;
+    unsigned int h, w, hm, wm, wd, hbg, wbg,  hfg, wfg;
     unsigned int sc, prec, y, x, d, k;
     int jpegcs = JCS_YCbCr;
     int jpegpf = JCS_RGB;
@@ -191,14 +207,13 @@ int main(int argc, char* argv[])
     extern int optind;
     extern char* optarg;
 #endif
-    tmsize_t scanline_size;
 
     if (argc < 4)
     {
         fprintf(stderr, "%s: Too few arguments\n", argv[0]);
         usage();
     }
-    while ((c = getopt(argc, argv, "a:b:c:d:f:l:o:q:x:y:z")) != -1)
+    while ((c = getopt(argc, argv, "a:b:c:d:f:l:o:q:rx:y:z")) != -1)
         switch (c)
         {
         case 'a':
@@ -224,6 +239,9 @@ int main(int argc, char* argv[])
             break;
         case 'q':
             jquality = atoi(optarg);
+            break;
+        case 'r':
+            retiff = !retiff;
             break;
         case 'x':
             fbscale = atof(optarg);
@@ -252,8 +270,8 @@ int main(int argc, char* argv[])
     if (argc - optind > 1)
     {
         infile = argv[optind++];
-        in = fopen(infile, "rb");
-        if (in == NULL)
+        fin = fopen(infile, "rb");
+        if (fin == NULL)
         {
             fprintf(stderr, "%s: Can not open.\n", infile);
             return (-1);
@@ -262,15 +280,15 @@ int main(int argc, char* argv[])
     else
     {
         infile = "<stdin>";
-        in = stdin;
+        fin = stdin;
 #if defined(HAVE_SETMODE) && defined(O_BINARY)
         setmode(fileno(stdin), O_BINARY);
 #endif
     }
 
-    if (fgetc(in) != 'P')
+    if (fgetc(fin) != 'P')
         pnmbad(infile);
-    switch (fgetc(in))
+    switch (fgetc(fin))
     {
     case '4':           /* it's a PBM file */
         bpp = 1;
@@ -296,9 +314,9 @@ int main(int argc, char* argv[])
     /* Parse header */
     while(1)
     {
-        if (feof(in))
+        if (feof(fin))
             pnmbad(infile);
-        c = fgetc(in);
+        c = fgetc(fin);
         /* Skip whitespaces (blanks, TABs, CRs, LFs) */
         if (strchr(" \t\r\n", c))
             continue;
@@ -308,41 +326,31 @@ int main(int argc, char* argv[])
         {
             do
             {
-                c = fgetc(in);
+                c = fgetc(fin);
             }
-            while(!(strchr("\r\n", c) || feof(in)));
+            while(!(strchr("\r\n", c) || feof(fin)));
             continue;
         }
 
-        ungetc(c, in);
+        ungetc(c, fin);
         break;
     }
+
     switch (bpp)
     {
     case 1:
-        if (fscanf(in, " %u %u", &w, &h) != 2)
+        if (fscanf(fin, " %u %u", &w, &h) != 2)
             pnmbad(infile);
-        if (fgetc(in) != '\n')
+        if (fgetc(fin) != '\n')
             pnmbad(infile);
         break;
     case 8:
-        if (fscanf(in, " %u %u %u", &w, &h, &prec) != 3)
+        if (fscanf(fin, " %u %u %u", &w, &h, &prec) != 3)
             pnmbad(infile);
-        if (fgetc(in) != '\n' || prec != 255)
+        if (fgetc(fin) != '\n' || prec != 255)
             pnmbad(infile);
         break;
     }
-    outtiff = TIFFOpen(argv[optind], "w");
-    if (outtiff == NULL)
-        return (-4);
-    TIFFSetField(outtiff, TIFFTAG_IMAGEWIDTH, (uint32) w);
-    TIFFSetField(outtiff, TIFFTAG_IMAGELENGTH, (uint32) h);
-    TIFFSetField(outtiff, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
-    TIFFSetField(outtiff, TIFFTAG_SAMPLESPERPIXEL, 1);
-    TIFFSetField(outtiff, TIFFTAG_BITSPERSAMPLE, 1);
-    TIFFSetField(outtiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
-    TIFFSetField(outtiff, TIFFTAG_PHOTOMETRIC, PHOTOMETRIC_MINISWHITE);
-    TIFFSetField(outtiff, TIFFTAG_COMPRESSION, COMPRESSION_CCITTFAX4);
     switch (bpp)
     {
     case 1:
@@ -353,33 +361,23 @@ int main(int argc, char* argv[])
         linebytes = multiply_ms(spp, w);
         break;
     }
-    TIFFSetField(outtiff, TIFFTAG_ROWSPERSTRIP, h);
-    if (linebytes == 0)
-    {
-        fprintf(stderr, "%s: scanline size overflow\n", infile);
-        (void) TIFFClose(outtiff);
-        exit(-2);
-    }
     pbmlinebytes = (multiply_ms(1, w) + (8 - 1)) / 8;
     bufpbm = (unsigned char *)_TIFFmalloc(pbmlinebytes);
     if (bufpbm == NULL)
     {
         fprintf(stderr, "%s: Not enough memory\n", infile);
-        (void) TIFFClose(outtiff);
         exit(-2);
     }
     bufpnm = (unsigned char *)_TIFFmalloc(w * h * spp);
     if (bufpnm == NULL)
     {
         fprintf(stderr, "%s: Not enough memory\n", infile);
-        (void) TIFFClose(outtiff);
         exit(-2);
     }
     bufmask = (bool *)_TIFFmalloc(w * h);
     if (bufmask == NULL)
     {
         fprintf(stderr, "%s: Not enough memory\n", infile);
-        (void) TIFFClose(outtiff);
         exit(-2);
     }
     hbg = (h + bgs - 1) / bgs;
@@ -390,46 +388,26 @@ int main(int argc, char* argv[])
     if (bufbg == NULL)
     {
         fprintf(stderr, "%s: Not enough memory\n", infile);
-        (void) TIFFClose(outtiff);
         exit(-2);
     }
     buffg = (unsigned char *)_TIFFmalloc(wbg * hbg * spp);
     if (buffg == NULL)
     {
         fprintf(stderr, "%s: Not enough memory\n", infile);
-        (void) TIFFClose(outtiff);
         exit(-2);
     }
-    scanline_size = TIFFScanlineSize(outtiff);
-    if (scanline_size == 0)
-    {
-        /* overflow - TIFFScanlineSize already printed a message */
-        (void) TIFFClose(outtiff);
-        exit(-2);
-    }
-    if (scanline_size < linebytes)
-        buf = (unsigned char *)_TIFFmalloc(linebytes);
-    else
-        buf = (unsigned char *)_TIFFmalloc(scanline_size);
+    buf = (unsigned char *)_TIFFmalloc(linebytes);
     if (buf == NULL)
     {
         fprintf(stderr, "%s: Not enough memory\n", infile);
-        (void) TIFFClose(outtiff);
         exit(-2);
-    }
-    if (dpi > 0)
-    {
-        TIFFSetField(outtiff, TIFFTAG_XRESOLUTION, dpi);
-        TIFFSetField(outtiff, TIFFTAG_YRESOLUTION, dpi);
-        TIFFSetField(outtiff, TIFFTAG_RESOLUTIONUNIT, RESUNIT_INCH);
     }
     kd = 0;
     for (y = 0; y < h; y++)
     {
-        if (fread(buf, linebytes, 1, in) != 1)
+        if (fread(buf, linebytes, 1, fin) != 1)
         {
-            fprintf(stderr, "%s: scanline %lu: Read error.\n",
-                    infile, (unsigned long) y);
+            fprintf(stderr, "%s: scanline %lu: Read error.\n", infile, (unsigned long) y);
             break;
         }
         if (bpp == 1)
@@ -457,16 +435,149 @@ int main(int argc, char* argv[])
             }
         }
     }
-    if (in != NULL)
-        fclose(in);
+    if (fin != NULL)
+        fclose(fin);
+
+    ftmp = fopen(argv[optind], "r");
+    if (ftmp != NULL)
+    {
+        maskexist = 1;
+        fclose(ftmp);
+    }
+    if (maskexist > 0)
+    {
+        outtiff = TIFFOpen(argv[optind], "r");
+        if (outtiff == NULL)
+        {
+            fprintf(stderr, "Can't open input file %s for reading\n", argv[optind]);
+            exit(-2);
+        }
+        TIFFGetField(outtiff, TIFFTAG_IMAGEWIDTH, &wm);
+        TIFFGetField(outtiff, TIFFTAG_IMAGELENGTH, &hm);
+        if ((hm != h) || (wm != w))
+        {
+            fprintf(stderr, "Bad size mask %s: %ux%u\n", argv[optind], wm, hm);
+            (void) TIFFClose(outtiff);
+            exit(-2);
+        }
+
+        if(TIFFGetField(outtiff, TIFFTAG_COMPRESSION, &compression) == 0)
+        {
+            fprintf(stderr, "No support for %s with compression type %u: not configured\n", argv[optind], compression);
+            (void) TIFFClose(outtiff);
+            exit(-2);
+        }
+        if( TIFFIsCODECConfigured(compression) == 0)
+        {
+            fprintf(stderr, "No support for %s with compression type %u: not configured\n", argv[optind], compression);
+            (void) TIFFClose(outtiff);
+            exit(-2);
+        }
+        TIFFGetFieldDefaulted(outtiff, TIFFTAG_BITSPERSAMPLE, &bppm);
+        switch(bppm)
+        {
+        case 0:
+            fprintf(stderr, "Image %s has 0 bits per sample, assuming 1\n", argv[optind]);
+            bppm=1;
+            break;
+        case 1:
+            break;
+        default:
+            fprintf(stderr, "Image %s not mask\n", argv[optind]);
+            (void) TIFFClose(outtiff);
+            exit(-2);
+        }
+        TIFFGetFieldDefaulted(outtiff, TIFFTAG_SAMPLESPERPIXEL, &sppm);
+        switch(sppm)
+        {
+        case 1:
+            break;
+        default:
+            fprintf(stderr, "Image %s not mask\n", argv[optind]);
+            (void) TIFFClose(outtiff);
+            exit(-2);
+        }
+        if(TIFFGetField(outtiff, TIFFTAG_PHOTOMETRIC, &photometric) == 0)
+        {
+            fprintf(stderr, "No support for %s with no photometric interpretation tag\n", argv[optind]);
+            (void) TIFFClose(outtiff);
+            exit(-2);
+        }
+        switch(photometric)
+        {
+        case PHOTOMETRIC_MINISWHITE:
+            break;
+        case PHOTOMETRIC_MINISBLACK:
+            bwmw = 1;
+            bwmb = 0;
+            break;
+        default:
+            fprintf(stderr, "Image %s not mask\n", argv[optind]);
+            (void) TIFFClose(outtiff);
+            exit(-2);
+            break;
+        }
+        datasize = TIFFTileSize(outtiff);
+        unsigned char *buffer = NULL;
+        buffer = (unsigned char*)_TIFFmalloc(datasize);
+        if (buffer == NULL)
+        {
+            fprintf(stderr, "Can't allocate %lu bytes of memory for image, %s\n", datasize, argv[optind]);
+            (void) TIFFClose(outtiff);
+            exit(-2);
+        }
+        memset(buffer, 0, datasize);
+        rowsize = TIFFTileRowSize(outtiff);
+        stripsize = TIFFStripSize(outtiff);
+        stripcount = TIFFNumberOfStrips(outtiff);
+        for(y = 0; y < stripcount; y++)
+        {
+            read = TIFFReadEncodedStrip(outtiff, y, (tdata_t) &buffer[bufferoffset], stripsize);
+            if(read == -1)
+            {
+                fprintf(stderr, "Error on decoding strip %u of %s\n", y, argv[optind]);
+                (void) TIFFClose(outtiff);
+                exit(-2);
+            }
+            bufferoffset += read;
+        }
+        kd = 0;
+        ki = 0;
+        for (y = 0; y < h; y++)
+        {
+            for (x = 0; x < w; x++)
+            {
+                k = x >> 3;
+                sc = ((buffer[ki + k] & (0x80 >> (x & 0x07))) == 0) ? bwmw : bwmb;
+                bufmask[kd] = sc;
+                kd++;
+            }
+            ki += rowsize;
+        }
+        maskexist = 1;
+        if (buffer)
+            _TIFFfree(buffer);
+        if(outtiff != NULL)
+            TIFFClose(outtiff);
+    }
 
     if (bpp > 1)
     {
-        if(!(level = ImageDjvulThreshold(bufpnm, bufmask, bufbg, buffg, w, h, spp, bgs, level, wbmode, doverlay, anisotropic, contrast, fbscale, delta)))
+        if (maskexist == 0)
         {
-            fprintf(stderr, "ERROR: not complite DjVuL ground\n");
-            (void) TIFFClose(outtiff);
-            exit(-3);
+            if(!(level = ImageDjvulThreshold(bufpnm, bufmask, bufbg, buffg, w, h, spp, bgs, level, wbmode, doverlay, anisotropic, contrast, fbscale, delta)))
+            {
+                fprintf(stderr, "ERROR: not complite DjVuL\n");
+                 exit(-3);
+            }
+        }
+        else
+        {
+            if(!(level = ImageDjvulGround(bufpnm, bufmask, bufbg, buffg, w, h, spp, bgs, level, doverlay)))
+            {
+                fprintf(stderr, "ERROR: not complite DjVuL ground\n");
+                exit(-3);
+            }
         }
         if (fgs > 1)
         {
@@ -474,48 +585,79 @@ int main(int argc, char* argv[])
         }
     }
 
-    for (y = 0; y < h; y++)
+    if ((maskexist == 0) || (retiff > 0))
     {
-        for (x = 0; x < w; x++)
+        outtiff = TIFFOpen(argv[optind], "w");
+        if (outtiff == NULL)
         {
-            k = x >> 3;
-            bufpbm[k] = 0;
+            fprintf(stderr, "Not read %s\n", argv[optind]);
+            exit(-2);
         }
-    }
-    kd = 0;
-    for (y = 0; y < h; y++)
-    {
-        wd = (8 - w % 8) % 8;
-        for (x = 0; x < w; x++)
+        TIFFSetField(outtiff, TIFFTAG_IMAGEWIDTH, (uint32) w);
+        TIFFSetField(outtiff, TIFFTAG_IMAGELENGTH, (uint32) h);
+        TIFFSetField(outtiff, TIFFTAG_ORIENTATION, ORIENTATION_TOPLEFT);
+        TIFFSetField(outtiff, TIFFTAG_SAMPLESPERPIXEL, 1);
+        TIFFSetField(outtiff, TIFFTAG_BITSPERSAMPLE, 1);
+        TIFFSetField(outtiff, TIFFTAG_PLANARCONFIG, PLANARCONFIG_CONTIG);
+        TIFFSetField(outtiff, TIFFTAG_PHOTOMETRIC, photometric);
+        TIFFSetField(outtiff, TIFFTAG_COMPRESSION, compression);
+        TIFFSetField(outtiff, TIFFTAG_ROWSPERSTRIP, h);
+        if (linebytes == 0)
         {
-            k = x >> 3;
-            kd++;
-            bufpbm[k] <<= 1;
-            bufpbm[k] |= ((bufmask[kd]) ? 1 : 0);
+            fprintf(stderr, "%s: scanline size overflow\n", infile);
+            (void) TIFFClose(outtiff);
+            exit(-2);
         }
-        k = (w - 1) >> 3;
-        bufpbm[k] <<= wd;
-        if (TIFFWriteScanline(outtiff, bufpbm, y, 0) < 0)
-            break;
+        if (dpi > 0)
+        {
+            TIFFSetField(outtiff, TIFFTAG_XRESOLUTION, dpi);
+            TIFFSetField(outtiff, TIFFTAG_YRESOLUTION, dpi);
+            TIFFSetField(outtiff, TIFFTAG_RESOLUTIONUNIT, RESUNIT_INCH);
+        }
+
+        for (y = 0; y < h; y++)
+        {
+            for (x = 0; x < w; x++)
+            {
+                k = x >> 3;
+                bufpbm[k] = 0;
+            }
+        }
+        kd = 0;
+        for (y = 0; y < h; y++)
+        {
+            wd = (8 - w % 8) % 8;
+            for (x = 0; x < w; x++)
+            {
+                k = x >> 3;
+                kd++;
+                bufpbm[k] <<= 1;
+                bufpbm[k] |= ((bufmask[kd]) ? 1 : 0);
+            }
+            k = (w - 1) >> 3;
+            bufpbm[k] <<= wd;
+            if (TIFFWriteScanline(outtiff, bufpbm, y, 0) < 0)
+                break;
+        }
+        (void) TIFFClose(outtiff);
+        if (buf)
+            _TIFFfree(buf);
     }
-    (void) TIFFClose(outtiff);
-    if (buf)
-        _TIFFfree(buf);
     if (bufmask)
         _TIFFfree(bufmask);
     if (bufpnm)
         _TIFFfree(bufpnm);
 
-    in = fopen(argv[optind],"rb");
-    if (in == NULL)
+    fin = fopen(argv[optind],"rb");
+    if (fin == NULL)
     {
         fprintf(stderr, "%s: Can not open.\n", argv[optind]);
         return (-1);
     }
-    fseek(in,0l,SEEK_END);
-    tifflen = ftell(in) - 8;
-    rewind(in);
-    fseek(in,8l,SEEK_SET);
+    fseek(fin, 0l, SEEK_END);
+    tifflen = ftell(fin) - 8;
+    rewind(fin);
+    fseek(fin, 8l, SEEK_SET);
     buf = (unsigned char *)_TIFFmalloc(tifflen + 1);
     if (buf == NULL)
     {
@@ -523,17 +665,17 @@ int main(int argc, char* argv[])
         (void) TIFFClose(outtiff);
         exit(-2);
     }
-    if (fread(buf, tifflen, 1, in) != 1)
+    if (fread(buf, tifflen, 1, fin) != 1)
     {
         fprintf(stderr, "Read error tiff.\n");
         exit(-3);
     }
-    if (in != NULL)
-        fclose(in);
+    if (fin != NULL)
+        fclose(fin);
 
     optind++;
-    out = fopen(argv[optind], "wb");
-    if (out == NULL)
+    fout = fopen(argv[optind], "wb");
+    if (fout == NULL)
     {
         fprintf(stderr, "%s: Can not open.\n", argv[optind]);
         return (-1);
@@ -557,202 +699,204 @@ int main(int argc, char* argv[])
     }
     lwi--;
     xnum = 0;
-    xref[xnum] = ftell(out);
+    xref[xnum] = ftell(fout);
     xnum++;
-    fwrite("%PDF-1.4\n%\342\343\317\323\n", 15, 1, out);
-    xref[xnum] = ftell(out);
+    fwrite("%PDF-1.4\n%\342\343\317\323\n", 15, 1, fout);
+    xref[xnum] = ftell(fout);
     xnum++;
-    fwrite("1 0 obj\n", 8, 1, out);
-    fwrite("\n<<\n/Kids [2 0 R]\n/Type /Pages\n/Count 1\n>>\nendobj\n", 50, 1, out);
-    fwrite("\n", 1, 1, out);
-    xref[xnum] = ftell(out);
+    fwrite("1 0 obj\n", 8, 1, fout);
+    fwrite("\n<<\n/Kids [2 0 R]\n/Type /Pages\n/Count 1\n>>\nendobj\n", 50, 1, fout);
+    fwrite("\n", 1, 1, fout);
+    xref[xnum] = ftell(fout);
     xnum++;
-    fwrite("2 0 obj\n", 8, 1, out);
-    fwrite("\n<<\n/pdftk_PageNum 1\n/Contents 3 0 R\n/Type /Page\n/Resources \n<<\n/ProcSet [/PDF /ImageC]\n/ExtGState 4 0 R\n/XObject 5 0 R\n>>\n/Parent 1 0 R\n/MediaBox [0 0 ", 152, 1, out);
-    fprintf(out, "%.2f %.2f", wp, hp);
-    fwrite("]\n>>\nendobj\n", 12, 1, out);
-    fwrite("\n", 1, 1, out);
-    xref[xnum] = ftell(out);
+    fwrite("2 0 obj\n", 8, 1, fout);
+    fwrite("\n<<\n/pdftk_PageNum 1\n/Contents 3 0 R\n/Type /Page\n/Resources \n<<\n/ProcSet [/PDF /ImageC]\n/ExtGState 4 0 R\n/XObject 5 0 R\n>>\n/Parent 1 0 R\n/MediaBox [0 0 ", 152, 1, fout);
+    fprintf(fout, "%.2f %.2f", wp, hp);
+    fwrite("]\n>>\nendobj\n", 12, 1, fout);
+    fwrite("\n", 1, 1, fout);
+    xref[xnum] = ftell(fout);
     xnum++;
-    fwrite("3 0 obj\n", 8, 1, out);
-    fwrite("\n<<\n/Length ", 12, 1, out);
+    fwrite("3 0 obj\n", 8, 1, fout);
+    fwrite("\n<<\n/Length ", 12, 1, fout);
     if (bpp > 1)
     {
-        fprintf(out, "%d", (33 + lhi + 3 + (lwi + 1 + lhi) + 3 + lwi + 13 + lwi + 5 + lhi + 29 + lhi + 3 + (lwi + 1 + lhi) + 3 + lwi + 13 + lwi + 5 + lhi + 30));
+        fprintf(fout, "%d", (33 + lhi + 3 + (lwi + 1 + lhi) + 3 + lwi + 13 + lwi + 5 + lhi + 29 + lhi + 3 + (lwi + 1 + lhi) + 3 + lwi + 13 + lwi + 5 + lhi + 30));
     }
     else
     {
-        fprintf(out, "%d", (33 + lhi + 3 + (lwi + 1 + lhi) + 3 + lwi + 13 + lwi + 5 + lhi + 30));
+        fprintf(fout, "%d", (33 + lhi + 3 + (lwi + 1 + lhi) + 3 + lwi + 13 + lwi + 5 + lhi + 30));
     }
-    fwrite("\n>>\nstream\n", 11, 1, out);
-    fwrite("q 0.01 0 0 0.01 0 0 cm\nq\n1 0 m\n1 ", 33, 1, out);
-    fprintf(out, "%d", hpi);
-    fwrite(" l\n", 3, 1, out);
-    fprintf(out, "%d %d", wpi, hpi);
-    fwrite(" l\n", 3, 1, out);
-    fprintf(out, "%d", wpi);
-    fwrite(" 0 l\nh\nW n\nq ", 13, 1, out);
-    fprintf(out, "%d", wpi);
-    fwrite(" 0 0 ", 5, 1, out);
-    fprintf(out, "%d", hpi);
+    fwrite("\n>>\nstream\n", 11, 1, fout);
+    fwrite("q 0.01 0 0 0.01 0 0 cm\nq\n1 0 m\n1 ", 33, 1, fout);
+    fprintf(fout, "%d", hpi);
+    fwrite(" l\n", 3, 1, fout);
+    fprintf(fout, "%d %d", wpi, hpi);
+    fwrite(" l\n", 3, 1, fout);
+    fprintf(fout, "%d", wpi);
+    fwrite(" 0 l\nh\nW n\nq ", 13, 1, fout);
+    fprintf(fout, "%d", wpi);
+    fwrite(" 0 0 ", 5, 1, fout);
+    fprintf(fout, "%d", hpi);
     if (bpp > 1)
     {
-        fwrite(" 0 0 cm\n/R7 Do\nQ\nQ\nq\n1 0 m\n1 ", 29, 1, out);
-        fprintf(out, "%d", hpi);
-        fwrite(" l\n", 3, 1, out);
-        fprintf(out, "%d %d", wpi, hpi);
-        fwrite(" l\n", 3, 1, out);
-        fprintf(out, "%d", wpi);
-        fwrite(" 0 l\nh\nW n\nq ", 13, 1, out);
-        fprintf(out, "%d", wpi);
-        fwrite(" 0 0 ", 5, 1, out);
-        fprintf(out, "%d", hpi);
-        fwrite(" 0 0 cm\n/R9 Do\nQ\nQ\n/R10 gs\nQ\n\n", 30, 1, out);
+        fwrite(" 0 0 cm\n/R7 Do\nQ\nQ\nq\n1 0 m\n1 ", 29, 1, fout);
+        fprintf(fout, "%d", hpi);
+        fwrite(" l\n", 3, 1, fout);
+        fprintf(fout, "%d %d", wpi, hpi);
+        fwrite(" l\n", 3, 1, fout);
+        fprintf(fout, "%d", wpi);
+        fwrite(" 0 l\nh\nW n\nq ", 13, 1, fout);
+        fprintf(fout, "%d", wpi);
+        fwrite(" 0 0 ", 5, 1, fout);
+        fprintf(fout, "%d", hpi);
+        fwrite(" 0 0 cm\n/R9 Do\nQ\nQ\n/R10 gs\nQ\n\n", 30, 1, fout);
     }
     else
     {
-        fwrite(" 0 0 cm\n/R8 Do\nQ\nQ\n/R10 gs\nQ\n\n", 30, 1, out);
+        fwrite(" 0 0 cm\n/R8 Do\nQ\nQ\n/R10 gs\nQ\n\n", 30, 1, fout);
     }
-    fwrite("endstream\nendobj\n", 17, 1, out);
-    fwrite("\n", 1, 1, out);
-    xref[xnum] = ftell(out);
+    fwrite("endstream\nendobj\n", 17, 1, fout);
+    fwrite("\n", 1, 1, fout);
+    xref[xnum] = ftell(fout);
     xnum++;
-    fwrite("4 0 obj\n", 8, 1, out);
-    fwrite("\n<<\n/R10 6 0 R\n>>\nendobj\n", 25, 1, out);
-    fwrite("\n", 1, 1, out);
-    xref[xnum] = ftell(out);
+    fwrite("4 0 obj\n", 8, 1, fout);
+    fwrite("\n<<\n/R10 6 0 R\n>>\nendobj\n", 25, 1, fout);
+    fwrite("\n", 1, 1, fout);
+    xref[xnum] = ftell(fout);
     xnum++;
-    fwrite("5 0 obj\n", 8, 1, out);
+    fwrite("5 0 obj\n", 8, 1, fout);
     if (bpp > 1)
     {
-        fwrite("\n<<\n/R7 7 0 R\n/R8 8 0 R\n/R9 9 0 R\n>>\nendobj\n", 44, 1, out);
+        fwrite("\n<<\n/R7 7 0 R\n/R8 8 0 R\n/R9 9 0 R\n>>\nendobj\n", 44, 1, fout);
     }
     else
     {
-        fwrite("\n<<\n/R8 8 0 R\n>>\nendobj\n", 24, 1, out);
+        fwrite("\n<<\n/R8 8 0 R\n>>\nendobj\n", 24, 1, fout);
     }
-    fwrite("\n", 1, 1, out);
-    xref[xnum] = ftell(out);
+    fwrite("\n", 1, 1, fout);
+    xref[xnum] = ftell(fout);
     xnum++;
-    fwrite("6 0 obj\n", 8, 1, out);
-    fwrite("\n<<\n/Type /ExtGState\n/TR /Identity\n>>\nendobj\n", 45, 1, out);
-    fwrite("\n", 1, 1, out);
+    fwrite("6 0 obj\n", 8, 1, fout);
+    fwrite("\n<<\n/Type /ExtGState\n/TR /Identity\n>>\nendobj\n", 45, 1, fout);
+    fwrite("\n", 1, 1, fout);
     if (bpp > 1)
     {
-        xref[xnum] = ftell(out);
+        xref[xnum] = ftell(fout);
         xnum++;
         jsize = jencode(&jcompressed, buffg, wfg, hfg, jpegpf, jquality, jpegcs, jprog, jopt, jsubsample);
-        fwrite("7 0 obj\n", 8, 1, out);
-        fwrite("\n<<\n/ColorSpace ", 16, 1, out);
+        fwrite("7 0 obj\n", 8, 1, fout);
+        fwrite("\n<<\n/ColorSpace ", 16, 1, fout);
         if (spp == 1)
         {
-            fwrite("/DeviceGray", 11, 1, out);
+            fwrite("/DeviceGray", 11, 1, fout);
         }
         else
         {
-            fwrite("/DeviceRGB", 10, 1, out);
+            fwrite("/DeviceRGB", 10, 1, fout);
         }
-        fwrite("\n/Subtype /Image\n/Height ", 25, 1, out);
-        fprintf(out, "%d", hfg);
-        fwrite("\n/Filter /DCTDecode\n/Width ", 27, 1, out);
-        fprintf(out, "%d", wfg);
-        fwrite("\n/BitsPerComponent 8\n/Length ", 29, 1, out);
-        fprintf(out, "%ld", jsize);
-        fwrite("\n>>\nstream\n", 11, 1, out);
-        fwrite(jcompressed, jsize, 1, out);
-        fwrite("\nendstream\nendobj\n", 18, 1, out);
-        fwrite("\n", 1, 1, out);
+        fwrite("\n/Subtype /Image\n/Height ", 25, 1, fout);
+        fprintf(fout, "%d", hfg);
+        fwrite("\n/Filter /DCTDecode\n/Width ", 27, 1, fout);
+        fprintf(fout, "%d", wfg);
+        fwrite("\n/BitsPerComponent 8\n/Length ", 29, 1, fout);
+        fprintf(fout, "%ld", jsize);
+        fwrite("\n>>\nstream\n", 11, 1, fout);
+        fwrite(jcompressed, jsize, 1, fout);
+        fwrite("\nendstream\nendobj\n", 18, 1, fout);
+        fwrite("\n", 1, 1, fout);
     }
-    xref[xnum] = ftell(out);
+    xref[xnum] = ftell(fout);
     xnum++;
-    fwrite("8 0 obj\n", 8, 1, out);
-    fwrite("\n<<\n/ColorSpace /DeviceGray\n/Subtype /Image\n/Height ", 52, 1, out);
-    fprintf(out, "%d", h);
-    fwrite("\n/Filter /CCITTFaxDecode\n/DecodeParms\n<<\n/Columns ", 50, 1, out);
-    fprintf(out, "%d", w);
-    fwrite("\n/K -1\n>>\n/Width ", 17, 1, out);
-    fprintf(out, "%d", w);
-    fwrite("\n/BitsPerComponent 1\n/Length ", 29, 1, out);
-    fprintf(out, "%ld", tifflen);
-    fwrite("\n>>\nstream\n", 11, 1, out);
-    fwrite(buf, tifflen, 1, out);
-    fwrite("\nendstream\nendobj\n", 18, 1, out);
-    fwrite("\n", 1, 1, out);
+    fwrite("8 0 obj\n", 8, 1, fout);
+    fwrite("\n<<\n/ColorSpace /DeviceGray\n/Subtype /Image\n/Height ", 52, 1, fout);
+    fprintf(fout, "%d", h);
+    fwrite("\n/Filter /CCITTFaxDecode\n/DecodeParms\n<<\n/Columns ", 50, 1, fout);
+    fprintf(fout, "%d", w);
+    fwrite("\n/K -1\n>>\n/Width ", 17, 1, fout);
+    fprintf(fout, "%d", w);
+    fwrite("\n/BitsPerComponent 1\n/Length ", 29, 1, fout);
+    fprintf(fout, "%ld", tifflen);
+    fwrite("\n>>\nstream\n", 11, 1, fout);
+    fwrite(buf, tifflen, 1, fout);
+    fwrite("\nendstream\nendobj\n", 18, 1, fout);
+    fwrite("\n", 1, 1, fout);
     if (bpp > 1)
     {
-        xref[xnum] = ftell(out);
+        xref[xnum] = ftell(fout);
         xnum++;
         jsize = jencode(&jcompressed, bufbg, wbg, hbg, jpegpf, jquality, jpegcs, jprog, jopt, jsubsample);
-        fwrite("9 0 obj\n", 8, 1, out);
-        fwrite("\n<<\n/ColorSpace ", 16, 1, out);
+        fwrite("9 0 obj\n", 8, 1, fout);
+        fwrite("\n<<\n/ColorSpace ", 16, 1, fout);
         if (spp == 1)
         {
-            fwrite("/DeviceGray", 11, 1, out);
+            fwrite("/DeviceGray", 11, 1, fout);
         }
         else
         {
-            fwrite("/DeviceRGB", 10, 1, out);
+            fwrite("/DeviceRGB", 10, 1, fout);
         }
-        fwrite("\n/Subtype /Image\n/Height ", 25, 1, out);
-        fprintf(out, "%d", hbg);
-        fwrite("\n/Filter /DCTDecode\n/Width ", 27, 1, out);
-        fprintf(out, "%d", wbg);
-        fwrite("\n/SMask 8 0 R\n/BitsPerComponent 8\n/Length ", 42, 1, out);
-        fprintf(out, "%ld", jsize);
-        fwrite("\n>>\nstream\n", 11, 1, out);
-        fwrite(jcompressed, jsize, 1, out);
-        fwrite("\nendstream\nendobj\n", 18, 1, out);
-        fwrite("\n", 1, 1, out);
+        fwrite("\n/Subtype /Image\n/Height ", 25, 1, fout);
+        fprintf(fout, "%d", hbg);
+        fwrite("\n/Filter /DCTDecode\n/Width ", 27, 1, fout);
+        fprintf(fout, "%d", wbg);
+        fwrite("\n/SMask 8 0 R\n/BitsPerComponent 8\n/Length ", 42, 1, fout);
+        fprintf(fout, "%ld", jsize);
+        fwrite("\n>>\nstream\n", 11, 1, fout);
+        fwrite(jcompressed, jsize, 1, fout);
+        fwrite("\nendstream\nendobj\n", 18, 1, fout);
+        fwrite("\n", 1, 1, fout);
     }
-    xref[xnum] = ftell(out);
+    xref[xnum] = ftell(fout);
     xnum++;
-    fwrite("10 0 obj\n", 9, 1, out);
-    fwrite("\n<<\n/Type /Catalog\n/Pages 1 0 R\n>>\nendobj\n", 42, 1, out);
-    fwrite("\n", 1, 1, out);
-    xref[xnum] = ftell(out);
+    fwrite("10 0 obj\n", 9, 1, fout);
+    fwrite("\n<<\n/Type /Catalog\n/Pages 1 0 R\n>>\nendobj\n", 42, 1, fout);
+    fwrite("\n", 1, 1, fout);
+    xref[xnum] = ftell(fout);
     xnum++;
-    fwrite("11 0 obj\n", 9, 1, out);
-    fwrite("\n<<\n/Creator (mfbpdf 1.0)\n", 26, 1, out);
-    fwrite("/Producer (MFB template)\n", 25, 1, out);
-    fwrite("/CreationDate ", 14, 1, out);
+    fwrite("11 0 obj\n", 9, 1, fout);
+    fwrite("\n<<\n/Creator (mfbpdf 1.0)\n", 26, 1, fout);
+    fwrite("/Producer (MFB template)\n", 25, 1, fout);
+    fwrite("/CreationDate ", 14, 1, fout);
     if (time(&timenow) == (time_t) -1)
     {
         timenow = (time_t) 0;
     }
     currenttime = gmtime(&timenow);
-    fprintf(out, "(D:%.4d%.2d%.2d%.2d%.2d%.2d)\n",
+    fprintf(fout, "(D:%.4d%.2d%.2d%.2d%.2d%.2d)\n",
             (currenttime->tm_year + 1900) % 65536,
             (currenttime->tm_mon + 1) % 256,
             (currenttime->tm_mday) % 256,
             (currenttime->tm_hour) % 256,
             (currenttime->tm_min) % 256,
             (currenttime->tm_sec) % 256);
-    fwrite("/ModDate ", 9, 1, out);
-    fprintf(out, "(D:%.4d%.2d%.2d%.2d%.2d%.2d)\n",
+    fwrite("/ModDate ", 9, 1, fout);
+    fprintf(fout, "(D:%.4d%.2d%.2d%.2d%.2d%.2d)\n",
             (currenttime->tm_year + 1900) % 65536,
             (currenttime->tm_mon + 1) % 256,
             (currenttime->tm_mday) % 256,
             (currenttime->tm_hour) % 256,
             (currenttime->tm_min) % 256,
             (currenttime->tm_sec) % 256);
-    fwrite(">>\nendobj\n", 10, 1, out);
-    fwrite("\n", 1, 1, out);
-    xref[xnum] = ftell(out);
+    fwrite(">>\nendobj\n", 10, 1, fout);
+    fwrite("\n", 1, 1, fout);
+    xref[xnum] = ftell(fout);
     xnum++;
-    fwrite("xref\n0 ", 7, 1, out);
-    fprintf(out, "%d\n%.10ld", xnum - 1, xref[0]);
-    fwrite(" 65535 f\n", 9, 1, out);
+    fwrite("xref\n0 ", 7, 1, fout);
+    fprintf(fout, "%d\n%.10ld", xnum - 1, xref[0]);
+    fwrite(" 65535 f\n", 9, 1, fout);
     for (kd = 1; kd < xnum - 1; kd++)
     {
-        fprintf(out, "%.10ld", xref[kd]);
-        fwrite(" 00000 n\n", 9, 1, out);
+        fprintf(fout, "%.10ld", xref[kd]);
+        fwrite(" 00000 n\n", 9, 1, fout);
     }
-    fwrite("trailer\n", 8, 1, out);
-    fwrite("\n<<\n/Info 11 0 R\n/Root 10 0 R\n/Size 12\n>>\nstartxref\n", 52, 1, out);
-    fprintf(out, "%ld\n", xref[xnum - 1]);
-    fwrite("%%EOF\n", 6, 1, out);
-    fclose(out);
+    fwrite("trailer\n", 8, 1, fout);
+    fwrite("\n<<\n/Info 11 0 R\n/Root 10 0 R\n/Size 12\n>>\nstartxref\n", 52, 1, fout);
+    fprintf(fout, "%ld\n", xref[xnum - 1]);
+    fwrite("%%EOF\n", 6, 1, fout);
+    fclose(fout);
 
+    if (buf)
+        _TIFFfree(buf);
     if (bufbg)
         _TIFFfree(bufbg);
     if (buffg)
