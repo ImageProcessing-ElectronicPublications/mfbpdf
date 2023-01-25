@@ -41,7 +41,7 @@ where options are:
  -r        rewrite tiff
  -x #      linear regulator DjVuL {*1.0}
  -y #      linear regulator DjVuL {+0.0}
- -z #      black mode
+ -z        black mode
 ```
 You can use [Netpbm](https://sourceforge.net/projects/netpbm/) or any other similar tool to obtain `PNM` from other format. Tiff image for recognition. For example, [tesseract](https://github.com/tesseract-ocr/tesseract)
 

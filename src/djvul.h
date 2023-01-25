@@ -4,7 +4,7 @@ https://github.com/plzombie/depress/issues/2
 
 #ifndef DJVUL_H_
 #define DJVUL_H_
-#define DJVUL_VERSION "2.2"
+#define DJVUL_VERSION "2.3"
 
 #include <stdbool.h>
 
@@ -69,7 +69,7 @@ int level = ImageDjvulThreshold(buf, bufbg, buffg, width, height, channels, bgs,
 
 DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned char* bufbg, unsigned char* buffg, unsigned int width, unsigned int height, unsigned int channels, unsigned int bgs, unsigned int level, int wbmode, float doverlay, float anisotropic, float contrast, float fbscale, float delta)
 {
-    unsigned int y, x, d, i, j;
+    unsigned int y, x, d, i, j, mchannels;
     unsigned int y0, x0, y1, x1, y0b, x0b, y1b, x1b, yb, xb;
     unsigned int widthbg, heightbg, whcp, blsz;
     unsigned long k, l, lm, n;
@@ -84,7 +84,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
     unsigned long int fgnum, bgnum;
     unsigned long int fgsum[DJVUL_IMAGE_CHANNELS], bgsum[DJVUL_IMAGE_CHANNELS];
 
-    channels = (channels < DJVUL_IMAGE_CHANNELS) ? channels : DJVUL_IMAGE_CHANNELS;
+    mchannels = (channels < DJVUL_IMAGE_CHANNELS) ? channels : DJVUL_IMAGE_CHANNELS;
     if (bgs > 0)
     {
         widthbg = (width + bgs - 1) / bgs;
@@ -138,7 +138,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
     {
         for (x = 0; x < widthbg; x++)
         {
-            for (d = 0; d < channels; d++)
+            for (d = 0; d < mchannels; d++)
             {
                 buffg[k] = fgbase;
                 bufbg[k] = bgbase;
@@ -153,8 +153,8 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
         cnth = (heightbg + blsz - 1) / blsz;
         cntw = (widthbg + blsz - 1) / blsz;
         maskbl = bgs * blsz;
-        maskover = (kover * maskbl);
-        bgsover = (kover * blsz);
+        maskover = (unsigned int)(kover * maskbl);
+        bgsover = (unsigned int)(kover * blsz);
         partl = (float)(level - l) / (float)level;
         for (i = 0; i < cnth; i++)
         {
@@ -170,7 +170,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                 x1b = (((x0b + bgsover) < widthbg) ? (x0b + bgsover) : widthbg);
 
                 // mean region buf
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     ims[d] = 0.0f;
                 }
@@ -181,14 +181,14 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                     for (x = x0; x < x1; x++)
                     {
                         k = (width * y + x) * channels;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             ims[d] += (float)buf[k + d];
                         }
                         n++;
                     }
                 }
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     if (n > 0)
                     {
@@ -200,7 +200,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                 }
 
                 // mean region buffg
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     ims[d] = 0.0f;
                 }
@@ -211,14 +211,14 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                     for (x = x0b; x < x1b; x++)
                     {
                         k = (widthbg * y + x) * channels;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             ims[d] += (float)buffg[k + d];
                         }
                         n++;
                     }
                 }
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     if (n > 0)
                     {
@@ -230,7 +230,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                 }
 
                 // mean region bufbg
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     ims[d] = 0.0f;
                 }
@@ -241,14 +241,14 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                     for (x = x0b; x < x1b; x++)
                     {
                         k = (widthbg * y + x) * channels;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             ims[d] += (float)bufbg[k + d];
                         }
                         n++;
                     }
                 }
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     if (n > 0)
                     {
@@ -261,7 +261,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
 
                 // distance buffg -> buf, bufbg -> buf
                 fgdist = 0.0f;
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     imd = gim[d];
                     imd -= fgim[d];
@@ -269,7 +269,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                     fgdist += imd;
                 }
                 bgdist = 0.0f;
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     imd = gim[d];
                     imd -= bgim[d];
@@ -292,7 +292,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                 fgk *= fbscale;
 
                 // separate FG and BG
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     fgsum[d] = 0;
                     bgsum[d] = 0;
@@ -304,14 +304,14 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                     for (x = x0; x < x1; x++)
                     {
                         k = (width * y + x) * channels;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             pim[d] = (int)buf[k + d];
-                            tim[d] = pim[d] +  contrast * (pim[d] - gim[d]);
+                            tim[d] = pim[d] +  (int)(contrast * (pim[d] - gim[d]));
                         }
 
                         fgdistf = 0.0f;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             imd = tim[d];
                             imd -= fgim[d];
@@ -319,7 +319,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                             fgdistf += imd;
                         }
                         bgdistf = 0.0f;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             imd = tim[d];
                             imd -= bgim[d];
@@ -329,17 +329,17 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
 
                         if ((fgdistf * fgk + delta) < bgdistf)
                         {
-                            for (d = 0; d < channels; d++)
+                            for (d = 0; d < mchannels; d++)
                             {
-                                fgsum[d] += pim[d];
+                                fgsum[d] += (unsigned long int)pim[d];
                             }
                             fgnum++;
                         }
                         else
                         {
-                            for (d = 0; d < channels; d++)
+                            for (d = 0; d < mchannels; d++)
                             {
-                                bgsum[d] += pim[d];
+                                bgsum[d] += (unsigned long int)pim[d];
                             }
                             bgnum++;
                         }
@@ -347,18 +347,20 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                 }
                 if (fgnum > 0)
                 {
-                    for (d = 0; d < channels; d++)
+                    for (d = 0; d < mchannels; d++)
                     {
-                        fgsum[d] /= (float)fgnum;
-                        fgim[d] = (int)(fgsum[d] + 0.5f);
+                        fgsum[d] += (fgnum >> 1);
+                        fgsum[d] /= fgnum;
+                        fgim[d] = (int)fgsum[d];
                     }
                 }
                 if (bgnum > 0)
                 {
-                    for (d = 0; d < channels; d++)
+                    for (d = 0; d < mchannels; d++)
                     {
-                        bgsum[d] /= (float)bgnum;
-                        bgim[d] = (int)(bgsum[d] + 0.5f);
+                        bgsum[d] += (bgnum >> 1);
+                        bgsum[d] /= bgnum;
+                        bgim[d] = (int)bgsum[d];
                     }
                 }
 
@@ -379,7 +381,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                     for (x = x0b; x < x1b; x++)
                     {
                         k = (widthbg * y + x) * channels;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             imx = (float)buffg[k + d];
                             imx *= fgpart;
@@ -399,7 +401,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                     for (x = x0b; x < x1b; x++)
                     {
                         k = (widthbg * y + x) * channels;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             imx = (float)bufbg[k + d];
                             imx *= bgpart;
@@ -426,17 +428,17 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
         {
             xb = x / bgs;
             k = (widthbg * yb + xb) * channels;
-            for (d = 0; d < channels; d++)
+            for (d = 0; d < mchannels; d++)
             {
-                pim[d] = (int)buf[l];
+                pim[d] = (int)buf[l + d];
                 fgim[d] = (int)buffg[k + d];
                 bgim[d] = (int)bufbg[k + d];
-                l++;
             }
+            l += channels;
 
             // distance buffg -> buf, bufbg -> buf
             fgdist = 0.0f;
-            for (d = 0; d < channels; d++)
+            for (d = 0; d < mchannels; d++)
             {
                 imd = pim[d];
                 imd -= fgim[d];
@@ -444,7 +446,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                 fgdist += (float)imd;
             }
             bgdist = 0.0f;
-            for (d = 0; d < channels; d++)
+            for (d = 0; d < mchannels; d++)
             {
                 imd = pim[d];
                 imd -= bgim[d];
@@ -479,7 +481,7 @@ int level = ImageDjvulThreshold(buf, bufbg, buffg, width, height, bgs, level, do
 
 DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* bufbg, unsigned char* buffg, unsigned int width, unsigned int height, unsigned int channels, unsigned int bgs, unsigned int level, float doverlay)
 {
-    unsigned int y, x, d, i, j;
+    unsigned int y, x, d, i, j, mchannels;
     unsigned int y0, x0, y1, x1, y0b, x0b, y1b, x1b, yb, xb;
     unsigned int widthbg, heightbg, whcp, blsz;
     unsigned long k, km, l, lm, n;
@@ -494,7 +496,7 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
     unsigned long int fgnum, bgnum;
     unsigned long int fgsum[DJVUL_IMAGE_CHANNELS], bgsum[DJVUL_IMAGE_CHANNELS];
 
-    channels = (channels < DJVUL_IMAGE_CHANNELS) ? channels : DJVUL_IMAGE_CHANNELS;
+    mchannels = (channels < DJVUL_IMAGE_CHANNELS) ? channels : DJVUL_IMAGE_CHANNELS;
     if (bgs > 0)
     {
         widthbg = (width + bgs - 1) / bgs;
@@ -539,7 +541,7 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
     {
         for (x = 0; x < widthbg; x++)
         {
-            for (d = 0; d < channels; d++)
+            for (d = 0; d < mchannels; d++)
             {
                 buffg[k] = fgbase;
                 bufbg[k] = bgbase;
@@ -554,8 +556,8 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
         cnth = (heightbg + blsz - 1) / blsz;
         cntw = (widthbg + blsz - 1) / blsz;
         maskbl = bgs * blsz;
-        maskover = (kover * maskbl);
-        bgsover = (kover * blsz);
+        maskover = (unsigned int)(kover * maskbl);
+        bgsover = (unsigned int)(kover * blsz);
         partl = (float)(level - l) / (float)level;
         for (i = 0; i < cnth; i++)
         {
@@ -570,68 +572,8 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
                 x0b = j * blsz;
                 x1b = (((x0b + bgsover) < widthbg) ? (x0b + bgsover) : widthbg);
 
-                // mean region buffg
-                for (d = 0; d < channels; d++)
-                {
-                    ims[d] = 0.0f;
-                }
-                n = 0;
-                k = 0;
-                for (y = y0b; y < y1b; y++)
-                {
-                    for (x = x0b; x < x1b; x++)
-                    {
-                        k = (widthbg * y + x) * channels;
-                        for (d = 0; d < channels; d++)
-                        {
-                            ims[d] += (float)buffg[k + d];
-                        }
-                        n++;
-                    }
-                }
-                for (d = 0; d < channels; d++)
-                {
-                    if (n > 0)
-                    {
-                        ims[d] /= (float)n;
-                    }
-                    ims[d] += 0.5f;
-                    ims[d] = (ims[d] < 0.0f) ? 0.0f : (ims[d] < 255.0f) ? ims[d] : 255.0f;
-                    fgim[d] = (int)ims[d];
-                }
-
-                // mean region bufbg
-                for (d = 0; d < channels; d++)
-                {
-                    ims[d] = 0.0f;
-                }
-                n = 0;
-                k = 0;
-                for (y = y0b; y < y1b; y++)
-                {
-                    for (x = x0b; x < x1b; x++)
-                    {
-                        k = (widthbg * y + x) * channels;
-                        for (d = 0; d < channels; d++)
-                        {
-                            ims[d] += (float)bufbg[k + d];
-                        }
-                        n++;
-                    }
-                }
-                for (d = 0; d < channels; d++)
-                {
-                    if (n > 0)
-                    {
-                        ims[d] /= (float)n;
-                    }
-                    ims[d] += 0.5f;
-                    ims[d] = (ims[d] < 0.0f) ? 0.0f : (ims[d] < 255.0f) ? ims[d] : 255.0f;
-                    bgim[d] = (int)ims[d];
-                }
-
                 // separate FG and BG
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     fgsum[d] = 0;
                     bgsum[d] = 0;
@@ -644,7 +586,7 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
                     {
                         km = width * y + x;
                         k = km * channels;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             pim[d] = (int)buf[k + d];
                         }
@@ -652,17 +594,17 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
 
                         if (mim)
                         {
-                            for (d = 0; d < channels; d++)
+                            for (d = 0; d < mchannels; d++)
                             {
-                                fgsum[d] += (int)pim[d];
+                                fgsum[d] += (unsigned long int)pim[d];
                             }
                             fgnum++;
                         }
                         else
                         {
-                            for (d = 0; d < channels; d++)
+                            for (d = 0; d < mchannels; d++)
                             {
-                                bgsum[d] += (int)pim[d];
+                                bgsum[d] += (unsigned long int)pim[d];
                             }
                             bgnum++;
                         }
@@ -670,23 +612,89 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
                 }
                 if (fgnum > 0)
                 {
-                    for (d = 0; d < channels; d++)
+                    for (d = 0; d < mchannels; d++)
                     {
-                        fgsum[d] /= (float)fgnum;
-                        fgim[d] = (int)(fgsum[d] + 0.5f);
+                        fgsum[d] += (fgnum >> 1);
+                        fgsum[d] /= fgnum;
+                        fgim[d] = (int)fgsum[d];
+                    }
+                }
+                else
+                {
+                    // mean region buffg
+                    for (d = 0; d < mchannels; d++)
+                    {
+                        ims[d] = 0.0f;
+                    }
+                    n = 0;
+                    k = 0;
+                    for (y = y0b; y < y1b; y++)
+                    {
+                        for (x = x0b; x < x1b; x++)
+                        {
+                            k = (widthbg * y + x) * channels;
+                            for (d = 0; d < mchannels; d++)
+                            {
+                                ims[d] += (float)buffg[k + d];
+                            }
+                            n++;
+                        }
+                    }
+                    for (d = 0; d < mchannels; d++)
+                    {
+                        if (n > 0)
+                        {
+                            ims[d] /= (float)n;
+                        }
+                        ims[d] += 0.5f;
+                        ims[d] = (ims[d] < 0.0f) ? 0.0f : (ims[d] < 255.0f) ? ims[d] : 255.0f;
+                        fgim[d] = (int)ims[d];
                     }
                 }
                 if (bgnum > 0)
                 {
-                    for (d = 0; d < channels; d++)
+                    for (d = 0; d < mchannels; d++)
                     {
-                        bgsum[d] /= (float)bgnum;
-                        bgim[d] = (int)(bgsum[d] + 0.5f);
+                        bgsum[d] += (bgnum >> 1);
+                        bgsum[d] /= bgnum;
+                        bgim[d] = (int)bgsum[d];
+                    }
+                }
+                else
+                {
+                    // mean region bufbg
+                    for (d = 0; d < mchannels; d++)
+                    {
+                        ims[d] = 0.0f;
+                    }
+                    n = 0;
+                    k = 0;
+                    for (y = y0b; y < y1b; y++)
+                    {
+                        for (x = x0b; x < x1b; x++)
+                        {
+                            k = (widthbg * y + x) * channels;
+                            for (d = 0; d < mchannels; d++)
+                            {
+                                ims[d] += (float)bufbg[k + d];
+                            }
+                            n++;
+                        }
+                    }
+                    for (d = 0; d < mchannels; d++)
+                    {
+                        if (n > 0)
+                        {
+                            ims[d] /= (float)n;
+                        }
+                        ims[d] += 0.5f;
+                        ims[d] = (ims[d] < 0.0f) ? 0.0f : (ims[d] < 255.0f) ? ims[d] : 255.0f;
+                        bgim[d] = (int)ims[d];
                     }
                 }
 
                 // mean region buf
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     ims[d] = 0.0f;
                 }
@@ -697,14 +705,14 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
                     for (x = x0; x < x1; x++)
                     {
                         k = (width * y + x) * channels;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             ims[d] += (float)buf[k + d];
                         }
                         n++;
                     }
                 }
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     if (n > 0)
                     {
@@ -716,7 +724,7 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
 
                 // distance buffg -> buf, bufbg -> buf
                 fgdist = 0.0f;
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     imd = pim[d];
                     imd -= fgim[d];
@@ -724,7 +732,7 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
                     fgdist += imd;
                 }
                 bgdist = 0.0f;
-                for (d = 0; d < channels; d++)
+                for (d = 0; d < mchannels; d++)
                 {
                     imd = pim[d];
                     imd -= bgim[d];
@@ -749,7 +757,7 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
                     for (x = x0b; x < x1b; x++)
                     {
                         k = (widthbg * y + x) * channels;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             imx = (float)buffg[k + d];
                             imx *= fgpart;
@@ -769,7 +777,7 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
                     for (x = x0b; x < x1b; x++)
                     {
                         k = (widthbg * y + x) * channels;
-                        for (d = 0; d < channels; d++)
+                        for (d = 0; d < mchannels; d++)
                         {
                             imx = (float)bufbg[k + d];
                             imx *= bgpart;
@@ -796,17 +804,17 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
         {
             xb = x / bgs;
             k = (widthbg * yb + xb) * channels;
-            for (d = 0; d < channels; d++)
+            for (d = 0; d < mchannels; d++)
             {
-                pim[d] = (int)buf[l];
+                pim[d] = (int)buf[l + d];
                 fgim[d] = (int)buffg[k + d];
                 bgim[d] = (int)bufbg[k + d];
-                l++;
             }
+            l += channels;
 
             // distance buffg -> buf, bufbg -> buf
             fgdist = 0.0f;
-            for (d = 0; d < channels; d++)
+            for (d = 0; d < mchannels; d++)
             {
                 imd = pim[d];
                 imd -= fgim[d];
@@ -814,7 +822,7 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
                 fgdist += (float)imd;
             }
             bgdist = 0.0f;
-            for (d = 0; d < channels; d++)
+            for (d = 0; d < mchannels; d++)
             {
                 imd = pim[d];
                 imd -= bgim[d];
@@ -831,8 +839,8 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
 
 DJVULAPI int ImageFGdownsample(unsigned char* buffg, unsigned int width, unsigned int height, unsigned int channels, unsigned int fgs)
 {
-    unsigned int widthfg, heightfg, y, x, y0, x0, y1, x1, xf, yf, d, n;
-    int s;
+    unsigned int widthfg, heightfg, y, x, y0, x0, y1, x1, xf, yf, d;
+    unsigned long int s, n;
     size_t k, kf;
 
     if (fgs > 1)
@@ -859,13 +867,15 @@ DJVULAPI int ImageFGdownsample(unsigned char* buffg, unsigned int width, unsigne
                         for (xf = x0; xf < x1; xf++)
                         {
                             kf = (width * yf + xf) * channels + d;
-                            s += (int)buffg[kf];
+                            s += (unsigned long int)buffg[kf];
                             n++;
                         }
                     }
                     n = (n > 0) ? n : 1;
+                    s += (n >> 1);
                     s /= n;
-                    buffg[k] = s;
+                    s = (s < 255) ? s : 255;
+                    buffg[k] = (unsigned char)s;
                     k++;
                 }
             }

@@ -24,6 +24,8 @@
  * OF THIS SOFTWARE.
  */
 
+#define MFBPDF_VERSION "1.3"
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdbool.h>
@@ -52,5 +54,3 @@ extern int getopt(int, char**, char*);
 
 #define streq(a,b)  (strcmp(a,b) == 0)
 #define strneq(a,b,n)   (strncmp(a,b,n) == 0)
-
-#define MFBPDF_VERSION "1.2"
