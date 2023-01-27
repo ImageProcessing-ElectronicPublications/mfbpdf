@@ -24,7 +24,7 @@
  * OF THIS SOFTWARE.
  */
 
-#define MFBPDF_VERSION "1.3"
+#define MFBPDF_VERSION "2.0"
 
 #include <stdio.h>
 #include <stdlib.h>

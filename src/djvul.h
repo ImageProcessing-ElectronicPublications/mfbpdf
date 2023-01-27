@@ -4,9 +4,10 @@ https://github.com/plzombie/depress/issues/2
 
 #ifndef DJVUL_H_
 #define DJVUL_H_
-#define DJVUL_VERSION "2.3"
+#define DJVUL_VERSION "3.0"
 
 #include <stdbool.h>
+#include <math.h>
 
 #ifdef DJVUL_STATIC
 #define DJVULAPI static
@@ -17,32 +18,26 @@ https://github.com/plzombie/depress/issues/2
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned char* bufbg, unsigned char* buffg, unsigned int width, unsigned int height, unsigned int channels, unsigned int bgs, unsigned int level, int wbmode, float doverlay, float anisotropic, float contrast, float fbscale, float delta);
 DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* bufbg, unsigned char* buffg, unsigned int width, unsigned int height, unsigned int channels, unsigned int bgs, unsigned int level, float doverlay);
 DJVULAPI int ImageFGdownsample(unsigned char* buffg, unsigned int width, unsigned int height, unsigned int channels, unsigned int fgs);
 DJVULAPI int ImageDjvuReconstruct(unsigned char* buf, bool* bufmask, unsigned char* bufbg, unsigned char* buffg, unsigned int width, unsigned int height, unsigned int channels, unsigned int widthbg, unsigned int heightbg, unsigned int widthfg, unsigned int heightfg);
+DJVULAPI int ImageDjvulSelect(unsigned char* buf, bool* bufmask, unsigned char* bufbg, unsigned char* buffg, unsigned int width, unsigned int height, unsigned int channels, unsigned int bgs, unsigned int level, int wbmode, float doverlay, float anisotropic, float contrast, float fbscale, float delta, float radius, float sensitivity, int method);
+
 #ifdef __cplusplus
 }
 #endif
 
 #define DJVUL_IMAGE_CHANNELS 3
+#define TDJVUL 0
+#define TBIMOD 1
+#define TSAUVOLA 2
+#define TBLUR 3
 
 #ifdef DJVUL_IMPLEMENTATION
 
-static float exp256aprox(float x)
-{
-    x = 1.0f + x / 256.0f;
-    x *= x;
-    x *= x;
-    x *= x;
-    x *= x;
-    x *= x;
-    x *= x;
-    x *= x;
-    x *= x;
-
-    return x;
-}
+#include "threshold.h"
 
 /*
 ImageDjvulThreshold()
@@ -64,7 +59,7 @@ bufbg, buffg - unsigned char* BG, FG (heightbg * widthbg * channels, heightbg = 
 level - use level
 
 Use:
-int level = ImageDjvulThreshold(buf, bufbg, buffg, width, height, channels, bgs, level, wbmode, doverlay, anisotropic, contrast, fbscale, delta);
+int level = ImageDjvulThreshold(buf, bufmask, bufbg, buffg, width, height, channels, bgs, level, wbmode, doverlay, anisotropic, contrast, fbscale, delta);
 */
 
 DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned char* bufbg, unsigned char* buffg, unsigned int width, unsigned int height, unsigned int channels, unsigned int bgs, unsigned int level, int wbmode, float doverlay, float anisotropic, float contrast, float fbscale, float delta)
@@ -283,7 +278,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                 {
                     fgk = (bgdist - fgdist) / fgk;
                     fgk *= anisotropic;
-                    fgk = exp256aprox(fgk);
+                    fgk = exp(fgk);
                 }
                 else
                 {
@@ -476,7 +471,7 @@ bufbg, buffg - unsigned char* BG, FG (heightbg * widthbg * channels, heightbg = 
 level - use level
 
 Use:
-int level = ImageDjvulThreshold(buf, bufbg, buffg, width, height, bgs, level, doverlay);
+int level = ImageDjvulThreshold(buf, bufmask, bufbg, buffg, width, height, bgs, level, doverlay);
 */
 
 DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* bufbg, unsigned char* buffg, unsigned int width, unsigned int height, unsigned int channels, unsigned int bgs, unsigned int level, float doverlay)
@@ -983,6 +978,28 @@ DJVULAPI int ImageDjvuReconstruct(unsigned char* buf, bool* bufmask, unsigned ch
     }
 
     return ground;
+}
+
+DJVULAPI int ImageDjvulSelect(unsigned char* buf, bool* bufmask, unsigned char* bufbg, unsigned char* buffg, unsigned int width, unsigned int height, unsigned int channels, unsigned int bgs, unsigned int level, int wbmode, float doverlay, float anisotropic, float contrast, float fbscale, float delta, float radius, float sensitivity, int method)
+{
+    switch(method)
+    {
+    case TBIMOD:
+        (void)ImageThresholdBimod(buf, bufmask, width, height, channels, fbscale, delta);
+        return ImageDjvulGround(buf, bufmask, bufbg, buffg, width, height, channels, bgs, level, doverlay);
+        break;
+    case TSAUVOLA:
+        (void)ImageThresholdSauvola(buf, bufmask, width, height, channels, (int)radius, sensitivity, fbscale, 0, 255, delta);
+        return ImageDjvulGround(buf, bufmask, bufbg, buffg, width, height, channels, bgs, level, doverlay);
+        break;
+    case TBLUR:
+        (void)ImageThresholdBlur(buf, bufmask, width, height, channels, radius, fbscale, delta, sensitivity);
+        return ImageDjvulGround(buf, bufmask, bufbg, buffg, width, height, channels, bgs, level, doverlay);
+        break;
+    default:
+        return ImageDjvulThreshold(buf, bufmask, bufbg, buffg, width, height, channels, bgs, level, wbmode, doverlay, anisotropic, contrast, fbscale, delta);
+        break;
+    }
 }
 
 #endif /* DJVUL_IMPLEMENTATION */

@@ -30,7 +30,9 @@
 
 #include "mfbpdf.h"
 #define DJVUL_IMPLEMENTATION
+#define THRESHOLD_IMPLEMENTATION
 #include "djvul.h"
+#include "threshold.h"
 
 static void usage(void)
 {
@@ -47,6 +49,8 @@ static void usage(void)
         " -o #      overlay blocks DjVuL {0.5}",
         " -q #      jpeg quality {75}",
         " -r        rewrite tiff",
+        " -s #      sensitivity for sauvola and blur {0.2}",
+        " -t #      threshold: djvul, bimod, sauvola, blur {djvul}",
         " -x #      linear regulator DjVuL {*1.0}",
         " -y #      linear regulator DjVuL {+0.0}",
         " -z        black mode",
@@ -63,6 +67,20 @@ static void usage(void)
     for (i = 0; stuff[i] != NULL; i++)
         fprintf(stderr, "%s\n", stuff[i]);
     exit(-1);
+}
+
+static int thresholdoptions(char* opt)
+{
+	int threshold = TDJVUL;
+	
+    if (streq(opt, "bimod"))
+        threshold = TBIMOD;
+    else if (streq(opt, "sauvola"))
+        threshold = TSAUVOLA;
+    else if (streq(opt, "blur"))
+        threshold = TBLUR;
+
+    return (threshold);
 }
 
 static void pnmbad(char* file)
@@ -181,11 +199,13 @@ int main(int argc, char* argv[])
     unsigned int fgs = 2;
     unsigned int level = 0;
     int wbmode = 1;
+    int tmode = TDJVUL;
     float doverlay = 0.5f;
     float anisotropic = 0.0f;
     float contrast = 0.0f;
     float fbscale = 1.0f;
     float delta = 0.0f;
+    float sensitivity = 0.2f;
     int retiff = 0;
     unsigned int h, w, hm, wm, wd, hbg, wbg,  hfg, wfg;
     unsigned int sc, prec, y, x, d, k;
@@ -213,7 +233,7 @@ int main(int argc, char* argv[])
         fprintf(stderr, "%s: Too few arguments\n", argv[0]);
         usage();
     }
-    while ((c = getopt(argc, argv, "a:b:c:d:f:l:o:q:rx:y:z")) != -1)
+    while ((c = getopt(argc, argv, "a:b:c:d:f:l:o:q:rs:t:x:y:z")) != -1)
         switch (c)
         {
         case 'a':
@@ -242,6 +262,12 @@ int main(int argc, char* argv[])
             break;
         case 'r':
             retiff = !retiff;
+            break;
+        case 's':
+            sensitivity = atof(optarg);
+            break;
+        case 't':
+			tmode = thresholdoptions(optarg);
             break;
         case 'x':
             fbscale = atof(optarg);
@@ -565,7 +591,7 @@ int main(int argc, char* argv[])
     {
         if (maskexist == 0)
         {
-            if(!(level = ImageDjvulThreshold(bufpnm, bufmask, bufbg, buffg, w, h, spp, bgs, level, wbmode, doverlay, anisotropic, contrast, fbscale, delta)))
+            if(!(level = ImageDjvulSelect(bufpnm, bufmask, bufbg, buffg, w, h, spp, bgs, level, wbmode, doverlay, anisotropic, contrast, fbscale, delta, (float)(bgs * fgs), sensitivity, tmode)))
             {
                 fprintf(stderr, "ERROR: not complite DjVuL\n");
                 exit(-3);

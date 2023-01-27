@@ -1,7 +1,7 @@
 PROJECT = mfbpdf
 CC = gcc
 CFLAGS = -Wall -Isrc
-LDFLAGS =  -ltiff -ljpeg -lz
+LDFLAGS =  -ltiff -ljpeg -lz -lm
 RM = rm -f
 
 all: $(PROJECT)

@@ -39,6 +39,8 @@ where options are:
  -o #      overlay blocks DjVuL {0.5}
  -q #      jpeg quality {75}
  -r        rewrite tiff
+ -s #      sensitivity for sauvola and blur {0.2}
+ -t #      threshold: djvul, bimod, sauvola, blur {djvul}
  -x #      linear regulator DjVuL {*1.0}
  -y #      linear regulator DjVuL {+0.0}
  -z        black mode
