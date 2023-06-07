@@ -4,7 +4,7 @@ https://github.com/plzombie/depress/issues/2
 
 #ifndef THRESHOLD_H_
 #define THRESHOLD_H_
-#define THRESHOLD_VERSION "3.0"
+#define THRESHOLD_VERSION "3.1"
 
 #include <stdbool.h>
 #include <math.h>
@@ -23,6 +23,7 @@ THRESHOLDAPI int ImageThreshold(unsigned char* buf, bool* bufmask, unsigned int 
 THRESHOLDAPI int ImageThresholdBimod(unsigned char* buf, bool* bufmask, unsigned int width, unsigned int height, unsigned int channels, float part, float delta);
 THRESHOLDAPI int ImageThresholdSauvola(unsigned char* buf, bool* bufmask, unsigned int width, unsigned int height, unsigned int channels, int radius, float sensitivity, float part, int lower_bound, int upper_bound, float delta);
 THRESHOLDAPI int ImageThresholdBlur(unsigned char* buf, bool* bufmask, unsigned int width, unsigned int height, unsigned int channels, float raduis, float part, float delta, float sensitivity);
+THRESHOLDAPI int ImageThresholdEdgePlus(unsigned char* buf, bool* bufmask, unsigned int width, unsigned int height, unsigned int channels, float raduis, float part, float delta, float sensitivity);
 
 #ifdef __cplusplus
 }
@@ -150,7 +151,7 @@ static void GaussLineMatrix (float *cmatrix, float radius)
                 t -= 0.5f;
                 t += step * j;
                 tt = -(t * t) / (2.0f * std_dev);
-                sum += exp (tt);
+                sum += (float)(exp(tt));
             }
             cmatrix[i] = sum * step;
         }
@@ -170,7 +171,7 @@ static void GaussLineMatrix (float *cmatrix, float radius)
     }
 }
 
-static float GaussBlurFilterY (unsigned char *src, int height, int width, int channels, float radius)
+static float GaussBlurFilterY (unsigned char *src, unsigned int height, unsigned int width, unsigned int channels, float radius)
 {
     int iradius, y, x, yp, yn, i, dval;
     unsigned long int k, kp, kn, line = width * channels;
@@ -199,9 +200,9 @@ static float GaussBlurFilterY (unsigned char *src, int height, int width, int ch
     if (iradius > 1)
     {
         k = 0;
-        for (y = 0; y < height; y++)
+        for (y = 0; y < (int)height; y++)
         {
-            for (x = 0; x < width; x++)
+            for (x = 0; x < (int)width; x++)
             {
                 for (d = 0; d < channels; d++)
                 {
@@ -221,7 +222,7 @@ static float GaussBlurFilterY (unsigned char *src, int height, int width, int ch
                             kp -= line;
                         }
                         yn = y + i;
-                        if (yn < height)
+                        if (yn < (int)height)
                         {
                             kn += line;
                         }
@@ -242,9 +243,9 @@ static float GaussBlurFilterY (unsigned char *src, int height, int width, int ch
             }
         }
         k = 0;
-        for (y = 0; y < height; y++)
+        for (y = 0; y < (int)height; y++)
         {
-            for (x = 0; x < width; x++)
+            for (x = 0; x < (int)width; x++)
             {
                 for (d = 0; d < channels; d++)
                 {
@@ -264,7 +265,7 @@ static float GaussBlurFilterY (unsigned char *src, int height, int width, int ch
     return gaussval;
 }
 
-static float GaussBlurFilterX (unsigned char *src, int height, int width, int channels, float radius)
+static float GaussBlurFilterX (unsigned char *src, unsigned int height, unsigned int width, unsigned int channels, float radius)
 {
     int iradius, y, x, xp, xn, i, dval;
     unsigned long int k, kp, kn;
@@ -293,9 +294,9 @@ static float GaussBlurFilterX (unsigned char *src, int height, int width, int ch
     if (iradius > 1)
     {
         k = 0;
-        for (y = 0; y < height; y++)
+        for (y = 0; y < (int)height; y++)
         {
-            for (x = 0; x < width; x++)
+            for (x = 0; x < (int)width; x++)
             {
                 for (d = 0; d < channels; d++)
                 {
@@ -315,7 +316,7 @@ static float GaussBlurFilterX (unsigned char *src, int height, int width, int ch
                             kp -= channels;
                         }
                         xn = x + i;
-                        if (xn < width)
+                        if (xn < (int)width)
                         {
                             kn += channels;
                         }
@@ -336,9 +337,9 @@ static float GaussBlurFilterX (unsigned char *src, int height, int width, int ch
             }
         }
         k = 0;
-        for (y = 0; y < height; y++)
+        for (y = 0; y < (int)height; y++)
         {
-            for (x = 0; x < width; x++)
+            for (x = 0; x < (int)width; x++)
             {
                 for (d = 0; d < channels; d++)
                 {
@@ -464,7 +465,7 @@ THRESHOLDAPI int ImageThresholdBimod(unsigned char* buf, bool* bufmask, unsigned
     ImageHist(buf, histogram, width, height, channels, Tmax);
     part *= 0.5f;
     threshold = HistBiMod (histogram, Tmax, part);
-    threshold += delta;
+    threshold += (int)delta;
     threshold = ImageThreshold(buf, bufmask, width, height, channels, threshold);
 
     return threshold;
@@ -517,11 +518,11 @@ THRESHOLDAPI int ImageThresholdSauvola(unsigned char* buf, bool* bufmask, unsign
     km = 0;
     for (y = 0; y < height; y++)
     {
-        y1 = (y < radius) ? 0 : (y - radius);
+        y1 = (y < (unsigned int)radius) ? 0 : (y - (unsigned int)radius);
         y2 = (y + radius + 1 < height) ? (y + radius + 1) : height;
         for (x = 0; x < width; x++)
         {
-            x1 = (x < radius) ? 0 : (x - radius);
+            x1 = (x < (unsigned int)radius) ? 0 : (x - (unsigned int)radius);
             x2 = (x + radius + 1 < width) ? (x + radius + 1) : width;
             imm = 0;
             imv = 0;
@@ -546,8 +547,8 @@ THRESHOLDAPI int ImageThresholdSauvola(unsigned char* buf, bool* bufmask, unsign
             imv /= n;
             imv -= (imm * imm);
             imv = (imv < 0) ? -imv : imv;
-            imv = sqrt(imv);
-            ima = 1.0 - imv / dynamic_range;
+            imv = (float)(sqrt(imv));
+            ima = 1.0f - imv / dynamic_range;
             imx = 0.0f;
             for (d = 0; d < channels; d++)
             {
@@ -564,7 +565,7 @@ THRESHOLDAPI int ImageThresholdSauvola(unsigned char* buf, bool* bufmask, unsign
             }
             else
             {
-                t = imm * (1.0 - sensitivity * ima) + delta;
+                t = imm * (1.0f - sensitivity * ima) + delta;
             }
             bufmask[km] = (imx < t);
             km++;
@@ -627,11 +628,71 @@ THRESHOLDAPI int ImageThresholdBlur(unsigned char* buf, bool* bufmask, unsigned 
             }
         }
         ImageMathDivide(buf, bufb, bufb, width, height, channels, -127.0f);
+        threshold = ImageThresholdBimod(bufb, bufmask, width, height, channels, part, delta);
+        free(bufb);
+    }
+    else
+    {
+        threshold = ImageThresholdBimod(buf, bufmask, width, height, channels, part, delta);
     }
 
-    threshold = ImageThresholdBimod(bufb, bufmask, width, height, channels, part, delta);
-    if (bufb)
+    return threshold;
+}
+
+/*
+ImageThresholdEdgePlus()
+
+input:
+buf - unsigned char* image (height * width * channels)
+part = 1.0f [1:1]
+delta = 0.0f [off, regulator]
+sensitivity = 0.2;
+
+output:
+bufmask - bool* image mask (height * width)
+threshold - threshold value
+
+Use:
+int threshold = ImageThresholdEdgePlus(buf, bufmask, width, height, channels, raduis, part, delta, sensitivity);
+*/
+
+THRESHOLDAPI int ImageThresholdEdgePlus(unsigned char* buf, bool* bufmask, unsigned int width, unsigned int height, unsigned int channels, float raduis, float part, float delta, float sensitivity)
+{
+    int threshold = 0;
+    unsigned int y, x, d;
+    float imo, imx, edge, edgeplus;
+    unsigned long int k;
+    unsigned char *bufb = NULL;
+
+    if ((bufb = (unsigned char*)malloc(height * width * channels * sizeof(unsigned char))))
+    {
+        ImageCopy(buf, bufb, width, height, channels);
+        (void)GaussBlurFilter(bufb, width, height, channels, raduis, raduis);
+        k = 0;
+        for (y = 0; y < height; y++)
+        {
+            for (x = 0; x < width; x++)
+            {
+                for (d = 0; d < channels; d++)
+                {
+                    imo = (float)buf[k];
+                    imx = (float)bufb[k];
+                    edge = (imo + 1.0f) / (imx + 1.0f) - 0.5f;
+                    edgeplus = imo * edge;
+                    imx = sensitivity * edgeplus + (1.0f - sensitivity) * imo;
+                    imx = (imx < 0.0f) ? 0.0f : (imx < 255.0f) ? imx : 255.0f;
+                    bufb[k] = (unsigned char)imx;
+                    k++;
+                }
+            }
+        }
+        threshold = ImageThresholdBimod(bufb, bufmask, width, height, channels, part, delta);
         free(bufb);
+    }
+    else
+    {
+        threshold = ImageThresholdBimod(buf, bufmask, width, height, channels, part, delta);
+    }
 
     return threshold;
 }

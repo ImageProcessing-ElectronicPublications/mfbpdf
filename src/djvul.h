@@ -4,7 +4,7 @@ https://github.com/plzombie/depress/issues/2
 
 #ifndef DJVUL_H_
 #define DJVUL_H_
-#define DJVUL_VERSION "3.0"
+#define DJVUL_VERSION "3.1"
 
 #include <stdbool.h>
 #include <math.h>
@@ -34,6 +34,7 @@ DJVULAPI int ImageDjvulSelect(unsigned char* buf, bool* bufmask, unsigned char* 
 #define TBIMOD 1
 #define TSAUVOLA 2
 #define TBLUR 3
+#define TEDGEPLUS 4
 
 #ifdef DJVUL_IMPLEMENTATION
 
@@ -115,7 +116,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
     {
         doverlay = 0.0f;
     }
-    kover = doverlay + 1.0;
+    kover = doverlay + 1.0f;
 
     // w/b mode {1/-1}
     if (wbmode < 0)
@@ -278,7 +279,7 @@ DJVULAPI int ImageDjvulThreshold(unsigned char* buf, bool* bufmask, unsigned cha
                 {
                     fgk = (bgdist - fgdist) / fgk;
                     fgk *= anisotropic;
-                    fgk = exp(fgk);
+                    fgk = (float)(exp(fgk));
                 }
                 else
                 {
@@ -527,7 +528,7 @@ DJVULAPI int ImageDjvulGround(unsigned char* buf, bool* bufmask, unsigned char* 
     {
         doverlay = 0.0f;
     }
-    kover = doverlay + 1.0;
+    kover = doverlay + 1.0f;
 
     fgbase = 127;
     bgbase = 127;
@@ -994,6 +995,10 @@ DJVULAPI int ImageDjvulSelect(unsigned char* buf, bool* bufmask, unsigned char* 
         break;
     case TBLUR:
         (void)ImageThresholdBlur(buf, bufmask, width, height, channels, radius, fbscale, delta, sensitivity);
+        return ImageDjvulGround(buf, bufmask, bufbg, buffg, width, height, channels, bgs, level, doverlay);
+        break;
+    case TEDGEPLUS:
+        (void)ImageThresholdEdgePlus(buf, bufmask, width, height, channels, radius, fbscale, delta, sensitivity);
         return ImageDjvulGround(buf, bufmask, bufbg, buffg, width, height, channels, bgs, level, doverlay);
         break;
     default:
